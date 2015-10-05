@@ -9,6 +9,8 @@ import numpy as np
 import theano.tensor as T
 from theano.tensor.signal.downsample import max_pool_2d
 
+from theano.sandbox.cuda.dnn import dnn_conv, dnn_pool
+
 
 def _relu(x):
     return T.maximum(x, 0)
@@ -104,7 +106,8 @@ class Convolution(object):
             self.input_ = input_tensor
 
         c = self.cropping_
-        self.expression_ = T.nnet.conv2d(self.input_,
+        ### FIXME replace that with dnn conv
+        self.expression_ = dnn_conv(self.input_,
             self.convolution_filter_,
             border_mode=self.border_mode,
             subsample=self.subsample_)[:, :, c[0][0]:c[0][1],
@@ -153,7 +156,7 @@ class MarginalConvolution(object):
             self.convolution_filter_ = cf
 
         self.input_ = T.tensor4(dtype=self.input_dtype)
-        self.expression_ = T.nnet.conv2d(
+        self.expression_ = dnn_conv(
             self.input_.reshape((-1, 1,
                                   self.input_.shape[-2],
                                   self.input_.shape[-1])),
@@ -376,7 +379,7 @@ class CaffePool(object):
                                 self.input_.dtype)
             n_imgs = self.input_.shape[0]
             n_channels = self.input_.shape[1]
-            conv_output = T.nnet.conv2d(
+            conv_output = dnn_conv(
                 padded_input.reshape((n_imgs * n_channels, 1,
                                       padded_input.shape[2],
                                       padded_input.shape[3])),

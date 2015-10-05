@@ -13,6 +13,7 @@ from .googlenet_layer_names import get_googlenet_layer_names
 from sklearn.base import BaseEstimator, TransformerMixin
 import theano
 import numpy as np
+import Image
 
 GOOGLENET_PATH = get_dataset_dir("caffe/bvlc_googlenet")
 
@@ -81,14 +82,22 @@ def fetch_googlenet_architecture(caffemodel_parsed=None,
     return model
 
 
-def create_theano_expressions(model=None, verbose=0):
+def create_theano_expressions(model=None, verbose=0,
+                              selected_layers = None,
+                              inputs = None):
 
     if model is None:
         model = fetch_googlenet_architecture()
 
-    layers, blobs, inputs = parse_caffe_model(model, verbose=verbose)
-    data_input = inputs['data']
-    return blobs, data_input
+    layers, blobs, inputs_, param = parse_caffe_model(model, verbose=verbose,
+                                                      selected_layers = selected_layers,
+                                                      inputs_var = inputs)
+
+    if inputs == None:
+        data_input = inputs_['data']
+    else:
+        data_input = inputs[1]
+    return blobs, data_input, param
 
 
 def _get_fprop(output_layers=('loss3/loss3',), model=None, verbose=0):
@@ -219,6 +228,7 @@ class GoogLeNetClassifier(BaseEstimator):
         self.large_network = large_network
         self.output_strings = output_strings
         self.transpose_order = transpose_order
+        #self.transform_function = _get_fprop(('pool5/7x7_s1',))
         self.transform_function = _get_fprop(('loss3/loss3',))
 
     def fit(self, X, y=None):
@@ -301,4 +311,5 @@ class GoogLeNetClassifier(BaseEstimator):
         """
         X = check_tensor(X, dtype=np.float32, n_dim=4)
         res = self._predict_proba(X)[:, :, 0, 0]
-        return np.sort(res, axis=1)[:, -self.top_n:]
+        return res
+        #return np.sort(res, axis=1)[:, -self.top_n:]
