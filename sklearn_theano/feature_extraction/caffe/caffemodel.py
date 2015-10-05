@@ -99,6 +99,8 @@ def _open_caffe_model(caffemodel_file):
         # Python 2 does not have encoding arg
         f = open(caffemodel_file, 'rb')
     binary_content = f.read()
+    #from IPython import embed; embed()
+    #raise ValueError()
     protobuf = caffe_pb2.NetParameter()
     protobuf.ParseFromString(binary_content)
 
@@ -211,8 +213,16 @@ def _parse_caffe_model(caffe_model):
     return parsed
 
 
-def parse_caffe_model(caffe_model, convert_fc_to_conv=True,
-                      float_dtype='float32', verbose=0):
+
+from sklearn_theano.base import (Convolution, Relu, MaxPool, FancyMaxPool,
+                                 LRN, Feedforward, ZeroPad,
+                                 CaffePool)
+
+
+def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
+                      selected_layers = None,
+                      inputs_var=None):
+
     if isinstance(caffe_model, str) or not isinstance(caffe_model, list):
         parsed_caffe_model = _parse_caffe_model(caffe_model)
     else:
@@ -223,7 +233,17 @@ def parse_caffe_model(caffe_model, convert_fc_to_conv=True,
     blobs = OrderedDict()
     params = OrderedDict()
 
+
+    if inputs_var is not None:
+        assert len(inputs_var) == 2
+        blobs[inputs_var[0]] = inputs_var[1]
+
     for i, layer in enumerate(parsed_caffe_model):
+        if selected_layers is not None and not i in selected_layers:
+            continue
+
+        print (i, layer['name'], layer['type'])
+
         layer_type = layer['type']
         layer_name = layer['name']
         top_blobs = layer['top_blobs']
@@ -240,8 +260,9 @@ def parse_caffe_model(caffe_model, convert_fc_to_conv=True,
                     blobs['label'] = T.ivector()
                     inputs['label'] = blobs['label']
                 else:
-                    blobs[data_blob_name] = T.tensor4(dtype=float_dtype)
-                    inputs[data_blob_name] = blobs[data_blob_name]
+                    if inputs_var is None:
+                        blobs[data_blob_name] = T.tensor4(dtype=float_dtype)
+                        inputs[data_blob_name] = blobs[data_blob_name]
         elif layer_type == 'CONVOLUTION':
             # CONVOLUTION layers take input from bottom_blob, convolve with
             # layer_blobs[0], and add bias layer_blobs[1]
@@ -276,6 +297,10 @@ def parse_caffe_model(caffe_model, convert_fc_to_conv=True,
                 expression = convolution_input
             convolution._build_expression(expression)
             expression = convolution.expression_
+
+            params[layer_name + '_conv_W'] = convolution.convolution_filter_
+            params[layer_name + '_conv_b'] = convolution.biases_
+
             # if subsample is not None:
             #     expression = expression[:, :, ::subsample[0],
             #                                     ::subsample[1]]
@@ -381,6 +406,8 @@ def parse_caffe_model(caffe_model, convert_fc_to_conv=True,
                 params[layer_name + '_conv_b'] = convolution.biases_
 
             fc_layer._build_expression(fully_connected_input)
+            params[layer_name + '_conv_W'] = convolution.convolution_filter_
+            params[layer_name + '_conv_b'] = convolution.biases_
             layers[layer_name] = fc_layer
             blobs[top_blobs[0]] = fc_layer.expression_
         else:
