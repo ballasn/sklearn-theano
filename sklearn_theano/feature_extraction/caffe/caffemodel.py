@@ -32,6 +32,7 @@ def _get_caffe_dir():
 def _compile_caffe_protobuf(caffe_proto=None,
                             proto_src_dir=None,
                             python_out_dir=None):
+                            url=None):
     """Compiles protocol buffer to python_out_dir"""
 
     if caffe_proto is None:
@@ -46,8 +47,9 @@ def _compile_caffe_protobuf(caffe_proto=None,
                 pass
             else:
                 print("Downloading caffe.proto")
-                url = ('https://raw.githubusercontent.com/'
-                       'BVLC/caffe/master/src/caffe/proto/caffe.proto')
+                if url is None:
+                    url = ('https://raw.githubusercontent.com/'
+                           'BVLC/caffe/master/src/caffe/proto/caffe.proto')
                 download(url, caffe_proto, progress_update_percentage=1)
             # raise ValueError("Cannot find $CAFFE_DIR environment variable"
             #                  " specifying location of Caffe files."
@@ -84,14 +86,18 @@ def _compile_caffe_protobuf(caffe_proto=None,
                 c=status, m=output))
 
 
-def _get_caffe_pb2():
-    from ...models.bvlc_googlenet import caffe_pb2
+def _get_caffe_pb2(model_type="googlenet"):
+    if model_type == "vgg_flows":
+        from ...models.vgg_flows import caffe_pb2
+    else:
+        from ...models.bvlc_googlenet import caffe_pb2
     return caffe_pb2
 
 
-def _open_caffe_model(caffemodel_file):
+def _open_caffe_model(caffemodel_file,
+                      model_type="googlenet"):
     """Opens binary format .caffemodel files. Returns protobuf object."""
-    caffe_pb2 = _get_caffe_pb2()
+    caffe_pb2 = _get_caffe_pb2(model_type)
     try:
         open(caffemodel_file, 'r', encoding="latin1").close()
         f = open(caffemodel_file, 'r', encoding="latin1")
@@ -103,7 +109,6 @@ def _open_caffe_model(caffemodel_file):
     #raise ValueError()
     protobuf = caffe_pb2.NetParameter()
     protobuf.ParseFromString(binary_content)
-
     return protobuf
 
 
@@ -161,9 +166,10 @@ def _get_property(obj, property_path):
         return getattr(obj, property_path)
 
 
-def _parse_caffe_model(caffe_model):
+def _parse_caffe_model(caffe_model,
+                       model_type="googlenet"):
     warnings.warn("Caching parse for caffemodel, this may take some time")
-    caffe_pb2 = _get_caffe_pb2()  # need to remove this dependence on pb here
+    caffe_pb2 = _get_caffe_pb2(model_type)  # need to remove this dependence on pb here
     try:
         _layer_types = caffe_pb2.LayerParameter.LayerType.items()
     except AttributeError:
@@ -176,14 +182,32 @@ def _parse_caffe_model(caffe_model):
 
     if not hasattr(caffe_model, "layers"):
         # Consider it a filename
-        caffe_model = _open_caffe_model(caffe_model)
+        caffe_model = _open_caffe_model(caffe_model, model_type=model_type)
 
     layers_raw = caffe_model.layers
+    if len(layers_raw) == 0:
+        layers_raw = caffe_model.layer
     parsed = []
 
     for n, layer in enumerate(layers_raw):
         # standard properties
         ltype = layer_types[layer.type]
+
+    for n, layer in enumerate(layers_raw):
+        print(layer.type)
+        # standard properties
+        # Fix for vgg-flows
+        try:
+            ltype = layer_types[layer.type]
+        except:
+            if not layer.type:
+                ltype =  'DATA'
+            else:
+                ltype = layer.type.upper()
+            if ltype == 'INNERPRODUCT':
+                ltype = 'INNER_PRODUCT'
+            if ltype == 'SOFTMAXWITHLOSS':
+                ltype = 'SOFTMAX_LOSS'
         if n == 0 and ltype != 'DATA':
             warnings.warn("Caffemodel doesn't start with DATA - adding")
             first_layer_descriptor = dict(
@@ -193,9 +217,14 @@ def _parse_caffe_model(caffe_model):
                 bottom_blobs=tuple())
             parsed.append(first_layer_descriptor)
 
+
+        ltop = layer.top
+        if not ltop:
+            ltop = ('outloss',)
+
         layer_descriptor = dict(type=ltype,
                                 name=layer.name,
-                                top_blobs=tuple(layer.top),
+                                top_blobs=tuple(ltop),
                                 bottom_blobs=tuple(layer.bottom))
         parsed.append(layer_descriptor)
         # specific properties
@@ -220,9 +249,10 @@ from sklearn_theano.base import (Convolution, Relu, MaxPool, FancyMaxPool,
 
 
 def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
+                      flow_inputs = None, flow_channels=5,
                       selected_layers = None,
-                      inputs_var=None):
-
+                      inputs_var=None,
+                      convert_fc_to_conv=True):
     if isinstance(caffe_model, str) or not isinstance(caffe_model, list):
         parsed_caffe_model = _parse_caffe_model(caffe_model)
     else:
@@ -279,6 +309,11 @@ def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
             conv_filter = layer_blobs[0].astype(float_dtype)[..., ::-1, ::-1]
             conv_bias = layer_blobs[1].astype(float_dtype).ravel()
             convolution_input = blobs[bottom_blobs[0]]
+
+            if flow_inputs == layer_name:
+                conv_filter = conv_filter.mean(axis=1, keepdims=True)
+                conv_filter = np.repeat(conv_filter, flow_channels, axis=1)
+
             convolution = Convolution(conv_filter, biases=conv_bias,
                                       activation=None, subsample=subsample,
                                       input_dtype=float_dtype)
@@ -405,6 +440,10 @@ def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
                 params[layer_name + '_conv_W'] = convolution.convolution_filter_
                 params[layer_name + '_conv_b'] = convolution.biases_
 
+            fully_connected_input = fully_connected_input.flatten(ndim=2)
+            fully_connected_input = fully_connected_input.reshape((fully_connected_input.shape[0],
+                                                                   fully_connected_input.shape[1],
+                                                                   1, 1))
             fc_layer._build_expression(fully_connected_input)
             params[layer_name + '_conv_W'] = convolution.convolution_filter_
             params[layer_name + '_conv_b'] = convolution.biases_

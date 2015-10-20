@@ -83,12 +83,15 @@ def fetch_googlenet_architecture(caffemodel_parsed=None,
 
 
 def create_theano_expressions(model=None, verbose=0,
+                              flow_inputs = None, flow_channels=5,
                               selected_layers = None,
                               inputs = None):
     if model is None:
         model = fetch_googlenet_architecture()
     layers, blobs, inputs_, param = parse_caffe_model(model, verbose=verbose,
-p                                                      selected_layers = selected_layers,
+                                                      flow_inputs = flow_inputs,
+                                                      flow_channels = flow_channels,
+                                                      selected_layers = selected_layers,
                                                       inputs_var = inputs)
 
     if inputs == None:
