@@ -102,7 +102,6 @@ def create_theano_expressions(model=None, verbose=0,
 
 
 
-
 def _get_fprop(output_layers=('loss3/loss3',), model=None, verbose=0):
 
     if model is None:

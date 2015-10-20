@@ -263,7 +263,6 @@ def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
     blobs = OrderedDict()
     params = OrderedDict()
 
-
     if inputs_var is not None:
         assert len(inputs_var) == 2
         blobs[inputs_var[0]] = inputs_var[1]
@@ -453,3 +452,4 @@ def parse_caffe_model(caffe_model, float_dtype='float32', verbose=0,
             raise ValueError('layer type %s is not known to sklearn-theano'
                              % layer_type)
     return layers, blobs, inputs, params
+
