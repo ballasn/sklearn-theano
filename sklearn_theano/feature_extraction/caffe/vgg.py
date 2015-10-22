@@ -75,15 +75,22 @@ def fetch_vgg_architecture(caffemodel_parsed=None, caffemodel_protobuffer=None):
     return model
 
 
-def create_theano_expressions(model=None, verbose=0):
+def create_theano_expressions(model=None, verbose=0,
+                              selected_layers = None,
+                              inputs = None):
 
     if model is None:
         model = fetch_vgg_architecture()
 
-    layers, blobs, inputs, params = parse_caffe_model(
-        model, convert_fc_to_conv=False, verbose=verbose)
-    data_input = inputs['data']
-    return blobs, data_input
+        layers, blobs, inputs_, param = parse_caffe_model(model, verbose=verbose,
+                                                          selected_layers = selected_layers,
+                                                          inputs_var = inputs)
+
+    if inputs == None:
+        data_input = inputs_['data']
+    else:
+        data_input = inputs[1]
+    return blobs, data_input, param
 
 
 def _get_fprop(output_layers=('prob',), model=None, verbose=0):
