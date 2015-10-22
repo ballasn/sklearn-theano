@@ -87,7 +87,6 @@ def fetch_twostream_architecture(caffemodel_parsed=None,
 
     # We didn't find the file: let's create it by parsing the protobuffer
     protobuf_file = fetch_protobuffer_file(caffemodel_protobuffer, split=split, mode=mode)
-    import pdb; pdb.set_trace()
     model = _parse_caffe_model(protobuf_file, model_type="vgg_flows")
 
     if caffemodel_parsed is not None:
@@ -104,11 +103,10 @@ def create_theano_expressions(split='split1', model=None, verbose=0,
                               inputs = None):
 
 
-    #import pdb; pdb.set_trace()
     ## test compile protobuf
     #url = ('https://raw.githubusercontent.com/'
     #       'yjxiong/caffe/action_recog/src/caffe/proto/caffe.proto')
-    #_compile_caffe_protobuf(python_out_dir="/u/ballasn/project/sklearn-theano/sklearn_theano/models/vgg_flows", url=url)
+    #_compile_caffe_protobuf(python_out_dir="/home/ballasn/project/sklearn-theano/sklearn_theano/models/vgg_flows", url=url)
 
     if model is None:
         model = fetch_twostream_architecture(split=split, mode=mode)

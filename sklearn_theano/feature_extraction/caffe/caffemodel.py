@@ -31,7 +31,7 @@ def _get_caffe_dir():
 
 def _compile_caffe_protobuf(caffe_proto=None,
                             proto_src_dir=None,
-                            python_out_dir=None):
+                            python_out_dir=None,
                             url=None):
     """Compiles protocol buffer to python_out_dir"""
 
@@ -188,10 +188,6 @@ def _parse_caffe_model(caffe_model,
     if len(layers_raw) == 0:
         layers_raw = caffe_model.layer
     parsed = []
-
-    for n, layer in enumerate(layers_raw):
-        # standard properties
-        ltype = layer_types[layer.type]
 
     for n, layer in enumerate(layers_raw):
         print(layer.type)
